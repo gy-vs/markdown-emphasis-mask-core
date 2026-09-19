@@ -300,6 +300,17 @@ export class _Lexer<ParserOutput = string, RendererOutput = string> {
     let maskedSrc = src;
     let match: RegExpExecArray | null = null;
 
+    // Let inline extensions mask the text they own before em/strong
+    // boundary scanning. This runs on the original source (before the
+    // built-in masks below) so escapes etc. inside extension text do not
+    // confuse the extension's own masking, and the returned string must
+    // keep the same length as src. The same result is used for every
+    // em/strong search in this call (and when called recursively on
+    // extension contents) instead of re-running the hooks.
+    if (this.options.hooks) {
+      maskedSrc = this.options.hooks.emStrongMask(maskedSrc);
+    }
+
     // Mask out reflinks
     if (this.tokens.links) {
       const links = Object.keys(this.tokens.links);

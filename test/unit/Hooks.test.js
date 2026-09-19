@@ -258,4 +258,228 @@ describe('Hooks', () => {
     const html = await marked.parse('text');
     assert.strictEqual(html.trim(), 'test parser');
   });
+
+  describe('emStrongMask', () => {
+    // custom ++underline++ syntax that allows `*` and `_` in its text
+    const underlineExtension = {
+      name: 'underline',
+      level: 'inline',
+      start(src) { return src.indexOf('++'); },
+      tokenizer(src) {
+        const match = /^\+\+([^+]+)\+\+/.exec(src);
+        if (match) {
+          return {
+            type: 'underline',
+            raw: match[0],
+            text: match[1],
+            tokens: this.lexer.inlineTokens(match[1]),
+          };
+        }
+      },
+      renderer(token) {
+        return `<u>${this.parser.parseInline(token.tokens)}</u>`;
+      },
+      childTokens: ['tokens'],
+    };
+
+    const underlineMask = function(src) {
+      return src.replace(/\+\+[^+]+\+\+/g, m => 'a'.repeat(m.length));
+    };
+
+    it('should mask custom inline syntax containing asterisks', () => {
+      marked.use({
+        extensions: [underlineExtension],
+        hooks: { emStrongMask: underlineMask },
+      });
+      const html = marked.parse('++a*b++ and *em*');
+      assert.strictEqual(html.trim(), '<p><u>a*b</u> and <em>em</em></p>');
+
+      // without the mask the inner * would be paired with the outer em delimiters
+      const masked = marked.parseInline('*++a*b++*');
+      assert.strictEqual(masked, '<em><u>a*b</u></em>');
+    });
+
+    it('should mask custom inline syntax in parseInline', () => {
+      marked.use({
+        extensions: [underlineExtension],
+        hooks: { emStrongMask: underlineMask },
+      });
+      const html = marked.parseInline('++a*b++ and *em*');
+      assert.strictEqual(html, '<u>a*b</u> and <em>em</em>');
+    });
+
+    it('should not mistake asterisks inside custom syntax for strong boundaries', () => {
+      marked.use({
+        extensions: [underlineExtension],
+        hooks: { emStrongMask: underlineMask },
+      });
+      const html = marked.parse('**++a*b++**');
+      assert.strictEqual(html.trim(), '<p><strong><u>a*b</u></strong></p>');
+    });
+
+    it('should handle nested emphasis around masked text', () => {
+      marked.use({
+        extensions: [underlineExtension],
+        hooks: { emStrongMask: underlineMask },
+      });
+      const html = marked.parse('*em ++x*y++ em*');
+      assert.strictEqual(html.trim(), '<p><em>em <u>x*y</u> em</em></p>');
+    });
+
+    it('should not interfere with escaped asterisks', () => {
+      marked.use({
+        extensions: [underlineExtension],
+        hooks: { emStrongMask: underlineMask },
+      });
+      assert.strictEqual(
+        marked.parse('\\*a* ++b\\*c++').trim(),
+        '<p>*a* <u>b*c</u></p>',
+      );
+      assert.strictEqual(
+        marked.parse('++a\\*b++').trim(),
+        '<p><u>a*b</u></p>',
+      );
+    });
+
+    it('should work in async mode with the same synchronous mask', async() => {
+      let maskCalls = 0;
+      marked.use({
+        async: true,
+        extensions: [underlineExtension],
+        hooks: {
+          emStrongMask(src) {
+            maskCalls++;
+            return underlineMask(src);
+          },
+        },
+        walkTokens() {
+          return timeout();
+        },
+      });
+      const promise = marked.parse('++a*b++ and *em*');
+      assert.ok(promise instanceof Promise);
+      const html = await promise;
+      assert.strictEqual(html.trim(), '<p><u>a*b</u> and <em>em</em></p>');
+      // one call for the paragraph text, one recursive call for the
+      // underline contents and one for the em contents, not one call
+      // per em/strong boundary search
+      assert.strictEqual(maskCalls, 3);
+    });
+
+    it('should compute the mask once per inlineTokens context', () => {
+      let maskCalls = 0;
+      marked.use({
+        extensions: [underlineExtension],
+        hooks: {
+          emStrongMask(src) {
+            maskCalls++;
+            return underlineMask(src);
+          },
+        },
+      });
+      marked.parse('*a* *b* ++x++ ++y++');
+      // one top-level call plus one recursive call per em/strong and underline token
+      assert.strictEqual(maskCalls, 5);
+    });
+
+    it('should combine multiple masks in reverse registration order', () => {
+      const markExtension = {
+        name: 'mark',
+        level: 'inline',
+        start(src) { return src.indexOf('=='); },
+        tokenizer(src) {
+          const match = /^==([^=]+)==/.exec(src);
+          if (match) {
+            return {
+              type: 'mark',
+              raw: match[0],
+              text: match[1],
+              tokens: this.lexer.inlineTokens(match[1]),
+            };
+          }
+        },
+        renderer(token) {
+          return `<mark>${this.parser.parseInline(token.tokens)}</mark>`;
+        },
+        childTokens: ['tokens'],
+      };
+      const markMask = function(src) {
+        return src.replace(/==[^=]+==/g, m => 'a'.repeat(m.length));
+      };
+
+      const order = [];
+      marked.use({
+        extensions: [underlineExtension],
+        hooks: {
+          emStrongMask(src) {
+            order.push(['underline', src]);
+            return underlineMask(src);
+          },
+        },
+      });
+      marked.use({
+        extensions: [markExtension],
+        hooks: {
+          emStrongMask(src) {
+            // newest hook runs first and receives the original source
+            order.push(['mark', src]);
+            return markMask(src);
+          },
+        },
+      });
+
+      const html = marked.parse('++a*b++ ==c*d== *e*');
+      assert.strictEqual(html.trim(), '<p><u>a*b</u> <mark>c*d</mark> <em>e</em></p>');
+
+      // the hook assigned last (mark) runs before the one assigned first (underline)
+      assert.deepStrictEqual(order.slice(0, 2).map(([name]) => name), ['mark', 'underline']);
+      // newest hook saw the original source, older hook saw the newer mask result
+      assert.strictEqual(order[0][1], '++a*b++ ==c*d== *e*');
+      assert.strictEqual(order[1][1], '++a*b++ aaaaaaa *e*');
+    });
+
+    it('should throw if a mask changes the length synchronously', () => {
+      marked.use({
+        hooks: {
+          emStrongMask(src) {
+            return src.replace(/a/g, '');
+          },
+        },
+      });
+      assert.throws(
+        () => marked.parse('a*b*'),
+        /emStrongMask hook returned a string of length \d+ for a string of length \d+/,
+      );
+    });
+
+    it('should reject if a mask changes the length in async mode', async() => {
+      marked.use({
+        async: true,
+        hooks: {
+          emStrongMask(src) {
+            return src.replace(/a/g, '');
+          },
+        },
+      });
+      await assert.rejects(
+        marked.parse('a*b*'),
+        /emStrongMask hook returned a string of length \d+ for a string of length \d+/,
+      );
+    });
+
+    it('should throw if a mask does not return a string', () => {
+      marked.use({
+        hooks: {
+          emStrongMask() {
+            // returning a Promise is not allowed during synchronous tokenization
+            return Promise.resolve('x');
+          },
+        },
+      });
+      assert.throws(
+        () => marked.parse('x'),
+        /emStrongMask hook must return a string/,
+      );
+    });
+  });
 });

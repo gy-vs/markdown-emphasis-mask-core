@@ -36,7 +36,14 @@ export type TokenizerAndRendererExtension<ParserOutput = string, RendererOutput 
 
 type HooksApi<ParserOutput = string, RendererOutput = string> = Omit<_Hooks<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'block'>;
 type HooksObject<ParserOutput = string, RendererOutput = string> = {
-  [K in keyof HooksApi<ParserOutput, RendererOutput>]?: (this: _Hooks<ParserOutput, RendererOutput>, ...args: Parameters<HooksApi<ParserOutput, RendererOutput>[K]>) => ReturnType<HooksApi<ParserOutput, RendererOutput>[K]> | Promise<ReturnType<HooksApi<ParserOutput, RendererOutput>[K]>>
+  [K in keyof HooksApi<ParserOutput, RendererOutput>]?: (
+    this: _Hooks<ParserOutput, RendererOutput>,
+    ...args: Parameters<HooksApi<ParserOutput, RendererOutput>[K]>
+  ) => K extends 'emStrongMask'
+    // emStrongMask runs during synchronous tokenization so it cannot be async,
+    // and it must return a string of the same length as its input
+    ? string
+    : ReturnType<HooksApi<ParserOutput, RendererOutput>[K]> | Promise<ReturnType<HooksApi<ParserOutput, RendererOutput>[K]>>;
 };
 
 type RendererApi<ParserOutput = string, RendererOutput = string> = Omit<_Renderer<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'parser'>;
@@ -79,6 +86,9 @@ export interface MarkedExtension<ParserOutput = string, RendererOutput = string>
    * postprocess is called to process html after marked has finished parsing.
    * provideLexer is called to provide a function to tokenize markdown.
    * provideParser is called to provide a function to parse tokens.
+   * emStrongMask is called with inline text to let extensions mask their
+   * own syntax (with an equal-length string) while em/strong delimiters
+   * are searched. It is synchronous even in async mode.
    */
   hooks?: HooksObject<ParserOutput, RendererOutput> | null;
 

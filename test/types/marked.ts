@@ -366,6 +366,23 @@ marked.use({
   }
 });
 
+marked.use({
+  hooks: {
+    emStrongMask(src) {
+      // synchronous, must return a string of the same length
+      return src.replace(/\+\+[^+]+\+\+/g, m => 'a'.repeat(m.length));
+    }
+  }
+});
+marked.use({
+  hooks: {
+    // @ts-expect-error emStrongMask cannot be async
+    async emStrongMask(src) {
+      return src;
+    }
+  }
+});
+
 // @ts-expect-error block is not exported
 import { block } from 'marked';
 // @ts-expect-error inline is not exported

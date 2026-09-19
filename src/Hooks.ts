@@ -52,4 +52,15 @@ export class _Hooks<ParserOutput = string, RendererOutput = string> {
   provideParser() {
     return this.block ? _Parser.parse<ParserOutput, RendererOutput> : _Parser.parseInline<ParserOutput, RendererOutput>;
   }
+
+  /**
+   * Mask out text owned by inline extensions while em/strong delimiters are
+   * being searched. The returned string must be exactly the same length as
+   * the input so the positions used by em/strong scanning stay aligned with
+   * the original source, which is still used for tokenization. This hook is
+   * always synchronous, even in async mode, because tokenization is synchronous.
+   */
+  emStrongMask(src: string): string {
+    return src;
+  }
 }

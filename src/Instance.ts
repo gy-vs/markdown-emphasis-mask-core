@@ -202,7 +202,23 @@ export class Marked<ParserOutput = string, RendererOutput = string> {
           const hooksProp = prop as Exclude<keyof _Hooks<ParserOutput, RendererOutput>, 'options' | 'block'>;
           const hooksFunc = pack.hooks[hooksProp] as UnknownFunction;
           const prevHook = hooks[hooksProp] as UnknownFunction;
-          if (_Hooks.passThroughHooks.has(prop)) {
+          if (prop === 'emStrongMask') {
+            // emStrongMask is always synchronous because tokenization is synchronous,
+            // even when the walkTokens hooks are run asynchronously. The masked
+            // string must stay the same length so em/strong positions line up
+            // with the original source.
+            // @ts-expect-error cannot type hook function dynamically
+            hooks[hooksProp] = (arg: unknown) => {
+              const ret = hooksFunc.call(hooks, arg) as unknown;
+              if (typeof ret !== 'string') {
+                throw new Error('emStrongMask hook must return a string (it cannot be async)');
+              }
+              if (typeof arg === 'string' && ret.length !== arg.length) {
+                throw new Error(`emStrongMask hook returned a string of length ${ret.length} for a string of length ${arg.length}. The masked string must be the same length as the input so positions match the original source.`);
+              }
+              return prevHook.call(hooks, ret);
+            };
+          } else if (_Hooks.passThroughHooks.has(prop)) {
             // @ts-expect-error cannot type hook function dynamically
             hooks[hooksProp] = (arg: unknown) => {
               if (this.defaults.async) {

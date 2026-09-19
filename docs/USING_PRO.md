@@ -265,8 +265,9 @@ Hooks are methods that hook into some part of marked. The following hooks are av
 | `processAllTokens(tokens: Token[]): Token[]` | Process all tokens before walk tokens. |
 | `provideLexer(): (src: string, options?: MarkedOptions) => Token[]` | Provide function to tokenize markdown. |
 | `provideParser(): (tokens: Token[], options?: MarkedOptions) => string` | Provide function to parse tokens. |
+| `emStrongMask(src: string): string` | Return an equal-length copy of `src` with text owned by inline extensions masked out, so `*` and `_` inside that text are not treated as em/strong boundaries. Called during tokenization (synchronously, even in [async](#async) mode); the original source is still used for tokenization. |
 
-`marked.use()` can be called multiple times with different `hooks` functions. Each function will be called in order, starting with the function that was assigned *last*.
+`marked.use()` can be called multiple times with different `hooks` functions. Each function will be called in order, starting with the function that was assigned *last*. For `emStrongMask`, each hook receives the previous hook's result and must return a string of the **same length** as the string it was given; marked throws an error otherwise, because a different length would misalign the em/strong boundary positions with the original source.
 
 **Example:** Set options based on [front-matter](https://www.npmjs.com/package/front-matter)
 
@@ -367,6 +368,56 @@ console.log(marked.parse(`
 ```html
 <p><a href="http://example.com">test link</a></p>
 ```
+
+**Example:** Custom inline syntax containing `*` or `_`
+
+An inline extension (for example a custom `++underline++` syntax) may contain asterisks in its text. Without a mask, marked sees those asterisks while searching for em/strong boundaries and pairs them with asterisks outside the extension. The `emStrongMask` hook lets the extension replace its own text with an equal-length placeholder during that search; tokenization itself still reads the original source.
+
+```js
+const underlineExt = {
+  name: 'underline',
+  level: 'inline',
+  start(src) { return src.indexOf('++'); },
+  tokenizer(src) {
+    const match = /^\+\+([^+]+)\+\+/.exec(src);
+    if (match) {
+      return {
+        type: 'underline',
+        raw: match[0],
+        text: match[1],
+        tokens: this.lexer.inlineTokens(match[1]),
+      };
+    }
+  },
+  renderer(token) {
+    return `<u>${this.parser.parseInline(token.tokens)}</u>`;
+  },
+  childTokens: ['tokens'],
+};
+
+// Replace each ++...++ span, including its delimiters, with 'a'
+// characters of the same length so positions stay aligned.
+function emStrongMask(src) {
+  return src.replace(/\+\+[^+]+\+\+/g, (m) => 'a'.repeat(m.length));
+}
+
+marked.use({
+  extensions: [underlineExt],
+  hooks: { emStrongMask },
+});
+
+console.log(marked.parse('*++a*b++*'));
+```
+
+**Output:**
+
+```html
+<p><em><u>a*b</u></em></p>
+```
+
+Without the mask the asterisks inside `++a*b++` are treated as the em boundaries, producing `<em>++a</em>b++*` instead.
+
+Multiple `emStrongMask` hooks (registered via separate `marked.use()` calls) are applied starting with the hook assigned *last*, and each must preserve the length of the string passed to it.
 
 ***
 
