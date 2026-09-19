@@ -265,8 +265,60 @@ Hooks are methods that hook into some part of marked. The following hooks are av
 | `processAllTokens(tokens: Token[]): Token[]` | Process all tokens before walk tokens. |
 | `provideLexer(): (src: string, options?: MarkedOptions) => Token[]` | Provide function to tokenize markdown. |
 | `provideParser(): (tokens: Token[], options?: MarkedOptions) => string` | Provide function to parse tokens. |
+| `emStrongMask(src: string): string` | Return an equal-length string that masks sections handled by inline extensions so they are ignored while searching for `em`/`strong` delimiters. |
 
 `marked.use()` can be called multiple times with different `hooks` functions. Each function will be called in order, starting with the function that was assigned *last*.
+
+#### The `emStrongMask` hook
+
+When an inline extension owns a section of text (for example a custom `++underline++` syntax), characters inside that section such as `*` and `_` must not be interpreted as emphasis delimiters. The em/strong scanner searches the whole line for closing delimiters *before* the inline tokenizer runs, so an asterisk inside the extension can be mistaken for the end of an emphasis span:
+
+```js
+// without a mask the em span closes at the `*` inside ++b*c++
+marked.parse('*a ++b*c++ d*');
+// <p><em>a ++b</em>c++ d*</p>
+```
+
+`emStrongMask` receives the original inline source and must return a string of the **same length** in which the sections the extension is responsible for are replaced with harmless characters (word characters such as `a` work well). The mask is only used for the em/strong boundary search; tokenization still reads the original text, so extension output is unaffected. Returning a string whose length differs from the input throws an error because emphasis positions are mapped back onto the original source.
+
+The hook is synchronous (it is not awaited) so the exact same mask is used in both sync and async parsing, and its result for each unique source is cached so the hook never runs more than once for the same text.
+
+**Example:** Custom underline that may contain asterisks
+
+```js
+import { Marked } from 'marked';
+
+const marked = new Marked({
+  extensions: [{
+    name: 'underline',
+    level: 'inline',
+    start(src) { return src.indexOf('++'); },
+    tokenizer(src) {
+      const match = /^\+\+([^+\n]+)\+\+/.exec(src);
+      if (match) {
+        return {
+          type: 'underline',
+          raw: match[0],
+          text: match[1],
+          tokens: this.lexer.inlineTokens(match[1]),
+        };
+      }
+    },
+    renderer(token) {
+      return `<u>${this.parser.parseInline(token.tokens)}</u>`;
+    },
+  }],
+  hooks: {
+    // replace every ++...++ span with an equal-length run of 'a'
+    emStrongMask(src) {
+      return src.replace(/\+\+[^+\n]*\+\+/g, m => 'a'.repeat(m.length));
+    },
+  },
+});
+
+marked.parse('*a ++b*c++ d*');
+// <p><em>a <u>b*c</u> d</em></p>
+```
 
 **Example:** Set options based on [front-matter](https://www.npmjs.com/package/front-matter)
 

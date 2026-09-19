@@ -40,6 +40,19 @@ export class _Hooks<ParserOutput = string, RendererOutput = string> {
   }
 
   /**
+   * Mask sections of inline text that extensions are responsible for
+   * tokenizing so the em/strong scanner does not treat characters (such as
+   * `*` or `_`) inside those sections as emphasis delimiters.
+   *
+   * The returned string must be the same length as `src`; the actual
+   * tokenization continues to read the original text. Multiple hooks are
+   * composed in order, each receiving the result of the previous hook.
+   */
+  emStrongMask(src: string) {
+    return src;
+  }
+
+  /**
    * Provide function to tokenize markdown
    */
   provideLexer() {

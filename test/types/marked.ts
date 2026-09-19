@@ -365,6 +365,20 @@ marked.use({
     }
   }
 });
+marked.use({
+  hooks: {
+    emStrongMask(src) {
+      // src is a string and the hook must return a string synchronously
+      return src.replace(/\+\+[^+]*\+\+/g, m => 'a'.repeat(m.length));
+    }
+  }
+});
+marked.use({
+  hooks: {
+    // @ts-expect-error emStrongMask cannot return a Promise
+    emStrongMask: async(src: string) => src,
+  }
+});
 
 // @ts-expect-error block is not exported
 import { block } from 'marked';

@@ -202,7 +202,15 @@ export class Marked<ParserOutput = string, RendererOutput = string> {
           const hooksProp = prop as Exclude<keyof _Hooks<ParserOutput, RendererOutput>, 'options' | 'block'>;
           const hooksFunc = pack.hooks[hooksProp] as UnknownFunction;
           const prevHook = hooks[hooksProp] as UnknownFunction;
-          if (_Hooks.passThroughHooks.has(prop)) {
+          if (prop === 'emStrongMask') {
+            // emStrongMask hooks are always synchronous (the inline lexer is
+            // not async-aware) and are piped together so every extension's
+            // mask is applied on top of the previous one.
+            // @ts-expect-error cannot type hook function dynamically
+            hooks[hooksProp] = (arg: unknown) => {
+              return prevHook.call(hooks, hooksFunc.call(hooks, arg));
+            };
+          } else if (_Hooks.passThroughHooks.has(prop)) {
             // @ts-expect-error cannot type hook function dynamically
             hooks[hooksProp] = (arg: unknown) => {
               if (this.defaults.async) {

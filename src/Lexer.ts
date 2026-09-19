@@ -18,6 +18,9 @@ export class _Lexer<ParserOutput = string, RendererOutput = string> {
 
   private tokenizer: _Tokenizer<ParserOutput, RendererOutput>;
   private inlineQueue: { src: string, tokens: Token[] }[];
+  // Cache of emStrongMask hook results so a hook is only run once per unique
+  // src (no repeated side effects) and sync/async parsing use the same mask.
+  private emStrongMaskCache = new Map<string, string>();
 
   constructor(options?: MarkedOptions<ParserOutput, RendererOutput>) {
     // TokenList cannot be created in one go
@@ -299,6 +302,27 @@ export class _Lexer<ParserOutput = string, RendererOutput = string> {
     // String with links masked to avoid interference with em and strong
     let maskedSrc = src;
     let match: RegExpExecArray | null = null;
+
+    // Let extensions mask sections they tokenize (e.g. custom syntax that may
+    // contain `*` or `_`) before the em/strong boundary search runs. The hook
+    // result is cached per src so it is computed once even if inlineTokens is
+    // re-entered, and sync/async parsing share the same mask. The mask must
+    // have the same length as src because em/strong positions are mapped back
+    // onto the original src.
+    if (this.options.hooks) {
+      let hookMaskedSrc: string;
+      if (this.emStrongMaskCache.has(src)) {
+        hookMaskedSrc = this.emStrongMaskCache.get(src)!;
+      } else {
+        const hookResult = this.options.hooks.emStrongMask(src);
+        if (typeof hookResult !== 'string' || hookResult.length !== src.length) {
+          throw new Error(`emStrongMask hook must return a string of the same length as the input (input length: ${src.length}, returned length: ${typeof hookResult === 'string' ? hookResult.length : typeof hookResult}).`);
+        }
+        this.emStrongMaskCache.set(src, hookResult);
+        hookMaskedSrc = hookResult;
+      }
+      maskedSrc = hookMaskedSrc;
+    }
 
     // Mask out reflinks
     if (this.tokens.links) {

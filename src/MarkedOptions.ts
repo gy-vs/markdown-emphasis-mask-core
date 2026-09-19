@@ -35,8 +35,19 @@ export interface RendererExtension<ParserOutput = string, RendererOutput = strin
 export type TokenizerAndRendererExtension<ParserOutput = string, RendererOutput = string> = TokenizerExtension | RendererExtension<ParserOutput, RendererOutput> | (TokenizerExtension & RendererExtension<ParserOutput, RendererOutput>);
 
 type HooksApi<ParserOutput = string, RendererOutput = string> = Omit<_Hooks<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'block'>;
+type AsyncHooksApi<ParserOutput = string, RendererOutput = string> = Omit<HooksApi<ParserOutput, RendererOutput>, 'emStrongMask'>;
 type HooksObject<ParserOutput = string, RendererOutput = string> = {
-  [K in keyof HooksApi<ParserOutput, RendererOutput>]?: (this: _Hooks<ParserOutput, RendererOutput>, ...args: Parameters<HooksApi<ParserOutput, RendererOutput>[K]>) => ReturnType<HooksApi<ParserOutput, RendererOutput>[K]> | Promise<ReturnType<HooksApi<ParserOutput, RendererOutput>[K]>>
+  [K in keyof AsyncHooksApi<ParserOutput, RendererOutput>]?: (this: _Hooks<ParserOutput, RendererOutput>, ...args: Parameters<AsyncHooksApi<ParserOutput, RendererOutput>[K]>) => ReturnType<AsyncHooksApi<ParserOutput, RendererOutput>[K]> | Promise<ReturnType<AsyncHooksApi<ParserOutput, RendererOutput>[K]>>
+} & {
+  /**
+   * Mask sections of inline text that an extension tokenizes (for example
+   * custom syntax that may contain `*` or `_`) so they are ignored by the
+   * em/strong boundary search. The returned string must be the same length as
+   * `src`; only the masked string is used for em/strong scanning while the
+   * original `src` is still used for tokenization. This hook is synchronous
+   * (it is not awaited) and the same result is used in sync and async parsing.
+   */
+  emStrongMask?: (this: _Hooks<ParserOutput, RendererOutput>, src: string) => string
 };
 
 type RendererApi<ParserOutput = string, RendererOutput = string> = Omit<_Renderer<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'parser'>;
@@ -79,6 +90,8 @@ export interface MarkedExtension<ParserOutput = string, RendererOutput = string>
    * postprocess is called to process html after marked has finished parsing.
    * provideLexer is called to provide a function to tokenize markdown.
    * provideParser is called to provide a function to parse tokens.
+   * emStrongMask is called with inline text before em/strong boundary search
+   * and must return an equal-length string that masks extension-owned sections.
    */
   hooks?: HooksObject<ParserOutput, RendererOutput> | null;
 
