@@ -300,6 +300,20 @@ export class _Lexer<ParserOutput = string, RendererOutput = string> {
     let maskedSrc = src;
     let match: RegExpExecArray | null = null;
 
+    // Let extensions mask out sections (e.g. inline math) so em and strong
+    // delimiters inside those sections are ignored. The returned string is
+    // only used for emphasis scanning, so it must keep the same length as
+    // the original text. This hook runs synchronously, even in async mode.
+    if (this.options.hooks) {
+      maskedSrc = this.options.hooks.emStrongMask(maskedSrc);
+      if (typeof maskedSrc !== 'string') {
+        throw new Error('emStrongMask hook must synchronously return a string, even when the async option is true.');
+      }
+      if (maskedSrc.length !== src.length) {
+        throw new Error(`emStrongMask hook must return a string of the same length as the input (input length: ${src.length}, returned length: ${maskedSrc.length}).`);
+      }
+    }
+
     // Mask out reflinks
     if (this.tokens.links) {
       const links = Object.keys(this.tokens.links);

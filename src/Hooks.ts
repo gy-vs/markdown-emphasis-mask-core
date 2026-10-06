@@ -18,6 +18,11 @@ export class _Hooks<ParserOutput = string, RendererOutput = string> {
     'processAllTokens',
   ]);
 
+  // Pass-through hooks that are always called synchronously, even in async mode
+  static syncPassThroughHooks = new Set([
+    'emStrongMask',
+  ]);
+
   /**
    * Process markdown before marked
    */
@@ -37,6 +42,16 @@ export class _Hooks<ParserOutput = string, RendererOutput = string> {
    */
   processAllTokens(tokens: Token[] | TokensList) {
     return tokens;
+  }
+
+  /**
+   * Mask inline markdown before finding em and strong delimiters. The
+   * returned string is only used to determine where emphasis starts and
+   * ends, so it must be the same length as the input. The original text is
+   * still tokenized and rendered.
+   */
+  emStrongMask(src: string) {
+    return src;
   }
 
   /**

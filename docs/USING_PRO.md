@@ -263,6 +263,7 @@ Hooks are methods that hook into some part of marked. The following hooks are av
 | `preprocess(markdown: string): string` | Process markdown before sending it to marked. |
 | `postprocess(html: string): string` | Process html after marked has finished parsing. |
 | `processAllTokens(tokens: Token[]): Token[]` | Process all tokens before walk tokens. |
+| `emStrongMask(src: string): string` | Mask sections of inline text that should not be scanned for em/strong delimiters. Must return a string of the same length as the input and cannot be async. The original text is still tokenized and rendered. |
 | `provideLexer(): (src: string, options?: MarkedOptions) => Token[]` | Provide function to tokenize markdown. |
 | `provideParser(): (tokens: Token[], options?: MarkedOptions) => string` | Provide function to parse tokens. |
 
@@ -303,6 +304,53 @@ line2
 ```html
 <p>line1<br>line2</p>
 ```
+
+**Example:** Keep stars and underscores inside inline math from being paired as emphasis
+
+An inline extension that turns `$...$` into a `<span>` will see its formulas split up when they appear inside `*em*` or `**strong**` and contain `*` or `_`. Register an `emStrongMask` hook that replaces each formula with a placeholder of the same length. The masked text is only used to find em and strong boundaries; the original text is what gets tokenized and rendered.
+
+```js
+import { marked } from 'marked';
+
+const mathExtension = {
+  name: 'math',
+  level: 'inline',
+  start(src) {
+    return src.indexOf('$');
+  },
+  tokenizer(src) {
+    const match = /^\$([^$]+)\$/.exec(src);
+    if (match) {
+      return {
+        type: 'math',
+        raw: match[0],
+        text: match[1],
+      };
+    }
+  },
+  renderer(token) {
+    return `<span class="math">${token.text}</span>`;
+  },
+};
+
+// Returned string must be exactly as long as the input
+function emStrongMask(src) {
+  return src.replace(/\$[^$]*\$/g, match => 'a'.repeat(match.length));
+}
+
+marked.use({ extensions: [mathExtension], hooks: { emStrongMask } });
+
+// Run marked
+console.log(marked.parse('*area $a*b*c$ total*'));
+```
+
+**Output:**
+
+```html
+<p><em>area <span class="math">a*b*c</span> total</em></p>
+```
+
+`emStrongMask` cannot be async, even when marked runs with `async: true`, because it is called while tokenizing. Multiple extensions can register the hook; each runs in `marked.use()` order (the hook registered *last* runs first), and they stack.
 
 **Example:** Sanitize HTML with [isomorphic-dompurify](https://www.npmjs.com/package/isomorphic-dompurify)
 

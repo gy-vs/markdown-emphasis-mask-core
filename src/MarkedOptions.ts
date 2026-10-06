@@ -35,9 +35,19 @@ export interface RendererExtension<ParserOutput = string, RendererOutput = strin
 export type TokenizerAndRendererExtension<ParserOutput = string, RendererOutput = string> = TokenizerExtension | RendererExtension<ParserOutput, RendererOutput> | (TokenizerExtension & RendererExtension<ParserOutput, RendererOutput>);
 
 type HooksApi<ParserOutput = string, RendererOutput = string> = Omit<_Hooks<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'block'>;
-type HooksObject<ParserOutput = string, RendererOutput = string> = {
+type AsyncHooksObject<ParserOutput = string, RendererOutput = string> = {
   [K in keyof HooksApi<ParserOutput, RendererOutput>]?: (this: _Hooks<ParserOutput, RendererOutput>, ...args: Parameters<HooksApi<ParserOutput, RendererOutput>[K]>) => ReturnType<HooksApi<ParserOutput, RendererOutput>[K]> | Promise<ReturnType<HooksApi<ParserOutput, RendererOutput>[K]>>
 };
+type HooksObject<ParserOutput = string, RendererOutput = string> =
+  & Omit<AsyncHooksObject<ParserOutput, RendererOutput>, 'emStrongMask'>
+  & {
+    /**
+     * Mask inline markdown before finding em and strong delimiters. Must
+     * return a string of the same length as the input and cannot be async
+     * (it is called during tokenization, even in async mode).
+     */
+    emStrongMask?: (this: _Hooks<ParserOutput, RendererOutput>, src: string) => string;
+  };
 
 type RendererApi<ParserOutput = string, RendererOutput = string> = Omit<_Renderer<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'parser'>;
 type RendererObject<ParserOutput = string, RendererOutput = string> = {
@@ -77,6 +87,9 @@ export interface MarkedExtension<ParserOutput = string, RendererOutput = string>
    * preprocess is called to process markdown before sending it to marked.
    * processAllTokens is called with the TokensList before walkTokens.
    * postprocess is called to process html after marked has finished parsing.
+   * emStrongMask is called with inline markdown to mask out sections that
+   * should not be scanned for em and strong delimiters. It must return a
+   * string of the same length as its input and cannot be async.
    * provideLexer is called to provide a function to tokenize markdown.
    * provideParser is called to provide a function to parse tokens.
    */

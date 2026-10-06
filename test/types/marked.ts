@@ -343,6 +343,40 @@ marked.use({
 });
 marked.use({
   hooks: {
+    emStrongMask(src) {
+      // mask inline math so the stars inside it are not paired as emphasis
+      return src.replace(/\$[^$]*\$/g, (match) => 'a'.repeat(match.length));
+    }
+  }
+});
+marked.use({
+  async: true,
+  hooks: {
+    emStrongMask(src) {
+      // emStrongMask must stay synchronous even in async mode
+      return src;
+    }
+  }
+});
+marked.use({
+  hooks: {
+    // @ts-expect-error emStrongMask cannot be async
+    async emStrongMask(src) {
+      return src;
+    }
+  }
+});
+marked.use({
+  hooks: {
+    // @ts-expect-error emStrongMask must return a string
+    emStrongMask(src) {
+      void src;
+      return undefined;
+    }
+  }
+});
+marked.use({
+  hooks: {
     provideLexer() {
       return this.block ? Lexer.lex : Lexer.lexInline;
     },

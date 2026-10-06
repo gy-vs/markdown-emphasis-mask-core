@@ -214,6 +214,12 @@ export class Marked<ParserOutput = string, RendererOutput = string> {
               const ret = hooksFunc.call(hooks, arg);
               return prevHook.call(hooks, ret);
             };
+          } else if (_Hooks.syncPassThroughHooks.has(prop)) {
+            // @ts-expect-error cannot type hook function dynamically
+            hooks[hooksProp] = (arg: unknown) => {
+              const ret = hooksFunc.call(hooks, arg);
+              return prevHook.call(hooks, ret);
+            };
           } else {
             // @ts-expect-error cannot type hook function dynamically
             hooks[hooksProp] = (...args: unknown[]) => {
