@@ -40,6 +40,17 @@ export class _Hooks<ParserOutput = string, RendererOutput = string> {
   }
 
   /**
+   * Mask sections of inline text (e.g. inline math) that are managed by an
+   * extension, so emphasis and strong delimiters inside them are not matched.
+   * The returned string is only used to determine emphasis boundaries and must
+   * have the same length as the string passed in; the original text is still
+   * tokenized and rendered.
+   */
+  emStrongMask(text: string) {
+    return text;
+  }
+
+  /**
    * Provide function to tokenize markdown
    */
   provideLexer() {

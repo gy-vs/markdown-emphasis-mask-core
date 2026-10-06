@@ -324,6 +324,12 @@ export class _Lexer<ParserOutput = string, RendererOutput = string> {
       maskedSrc = maskedSrc.slice(0, match.index) + '[' + 'a'.repeat(match[0].length - 2) + ']' + maskedSrc.slice(this.tokenizer.rules.inline.blockSkip.lastIndex);
     }
 
+    // Let extensions mask out sections (e.g. inline math) so delimiters such
+    // as '*' and '_' managed by the extension are not used for em/strong
+    if (this.options.hooks) {
+      maskedSrc = this.options.hooks.emStrongMask(maskedSrc);
+    }
+
     let keepPrevChar = false;
     let prevChar = '';
     while (src) {

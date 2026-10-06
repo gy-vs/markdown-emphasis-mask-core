@@ -35,9 +35,18 @@ export interface RendererExtension<ParserOutput = string, RendererOutput = strin
 export type TokenizerAndRendererExtension<ParserOutput = string, RendererOutput = string> = TokenizerExtension | RendererExtension<ParserOutput, RendererOutput> | (TokenizerExtension & RendererExtension<ParserOutput, RendererOutput>);
 
 type HooksApi<ParserOutput = string, RendererOutput = string> = Omit<_Hooks<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'block'>;
-type HooksObject<ParserOutput = string, RendererOutput = string> = {
-  [K in keyof HooksApi<ParserOutput, RendererOutput>]?: (this: _Hooks<ParserOutput, RendererOutput>, ...args: Parameters<HooksApi<ParserOutput, RendererOutput>[K]>) => ReturnType<HooksApi<ParserOutput, RendererOutput>[K]> | Promise<ReturnType<HooksApi<ParserOutput, RendererOutput>[K]>>
+type AsyncHooksObject<ParserOutput = string, RendererOutput = string> = {
+  [K in Exclude<keyof HooksApi<ParserOutput, RendererOutput>, 'emStrongMask'>]?: (this: _Hooks<ParserOutput, RendererOutput>, ...args: Parameters<HooksApi<ParserOutput, RendererOutput>[K]>) => ReturnType<HooksApi<ParserOutput, RendererOutput>[K]> | Promise<ReturnType<HooksApi<ParserOutput, RendererOutput>[K]>>
 };
+
+// emStrongMask runs during synchronous inline tokenizing and cannot be async
+type SyncHooksObject<ParserOutput = string, RendererOutput = string> = Pick<HooksApi<ParserOutput, RendererOutput>, 'emStrongMask'>;
+
+type HooksObject<ParserOutput = string, RendererOutput = string> =
+  & AsyncHooksObject<ParserOutput, RendererOutput>
+  & {
+    [K in keyof SyncHooksObject<ParserOutput, RendererOutput>]?: (this: _Hooks<ParserOutput, RendererOutput>, ...args: Parameters<SyncHooksObject<ParserOutput, RendererOutput>[K]>) => ReturnType<SyncHooksObject<ParserOutput, RendererOutput>[K]>
+  };
 
 type RendererApi<ParserOutput = string, RendererOutput = string> = Omit<_Renderer<ParserOutput, RendererOutput>, 'constructor' | 'options' | 'parser'>;
 type RendererObject<ParserOutput = string, RendererOutput = string> = {
@@ -77,6 +86,7 @@ export interface MarkedExtension<ParserOutput = string, RendererOutput = string>
    * preprocess is called to process markdown before sending it to marked.
    * processAllTokens is called with the TokensList before walkTokens.
    * postprocess is called to process html after marked has finished parsing.
+   * emStrongMask is called with inline text before matching emphasis and strong delimiters.
    * provideLexer is called to provide a function to tokenize markdown.
    * provideParser is called to provide a function to parse tokens.
    */

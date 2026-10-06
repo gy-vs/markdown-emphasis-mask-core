@@ -263,10 +263,13 @@ Hooks are methods that hook into some part of marked. The following hooks are av
 | `preprocess(markdown: string): string` | Process markdown before sending it to marked. |
 | `postprocess(html: string): string` | Process html after marked has finished parsing. |
 | `processAllTokens(tokens: Token[]): Token[]` | Process all tokens before walk tokens. |
+| `emStrongMask(text: string): string` | Mask sections of inline text managed by an extension so `*` and `_` inside them are not matched as em/strong delimiters. Must return a string of the same length. |
 | `provideLexer(): (src: string, options?: MarkedOptions) => Token[]` | Provide function to tokenize markdown. |
 | `provideParser(): (tokens: Token[], options?: MarkedOptions) => string` | Provide function to parse tokens. |
 
 `marked.use()` can be called multiple times with different `hooks` functions. Each function will be called in order, starting with the function that was assigned *last*.
+
+The `emStrongMask` hook receives the current inline text and returns a masked version used only for finding where emphasis and strong start and end, so the returned string must have exactly the same length as the one passed in (an error is thrown otherwise). The original text is still what gets tokenized and rendered. It runs synchronously, even when the `async` option is set.
 
 **Example:** Set options based on [front-matter](https://www.npmjs.com/package/front-matter)
 
@@ -366,6 +369,51 @@ console.log(marked.parse(`
 
 ```html
 <p><a href="http://example.com">test link</a></p>
+```
+
+**Example:** Keep `*` inside inline math from closing emphasis
+
+An inline math extension that wraps formulas in `$...$` has to hide the formula from em/strong delimiter matching, otherwise a `*` used as a multiplication sign inside the formula can close an enclosing emphasis. The `emStrongMask` hook replaces the formula with spaces of the same length; the original text is still passed to the extension tokenizer and rendered unchanged.
+
+```js
+import { Marked } from 'marked';
+
+const marked = new Marked({
+  extensions: [{
+    name: 'math',
+    level: 'inline',
+    start(src) {
+      return src.indexOf('$');
+    },
+    tokenizer(src) {
+      const match = /^\$([^$]+)\$/.exec(src);
+      if (match) {
+        return {
+          type: 'math',
+          raw: match[0],
+          text: match[1],
+        };
+      }
+    },
+    renderer(token) {
+      return `<span class="math">${token.text}</span>`;
+    },
+  }],
+  hooks: {
+    emStrongMask(text) {
+      // Replace every $...$ span with spaces; length must stay the same
+      return text.replace(/\$[^$]*\$/g, span => ' '.repeat(span.length));
+    },
+  },
+});
+
+console.log(marked.parse('*area $a*b*c$ total*'));
+```
+
+**Output:**
+
+```html
+<p><em>area <span class="math">a*b*c</span> total</em></p>
 ```
 
 ***

@@ -214,6 +214,19 @@ export class Marked<ParserOutput = string, RendererOutput = string> {
               const ret = hooksFunc.call(hooks, arg);
               return prevHook.call(hooks, ret);
             };
+          } else if (prop === 'emStrongMask') {
+            // emStrongMask runs during inline tokenizing, so it is always
+            // synchronous and must return a string of the same length
+            hooks.emStrongMask = (text: string) => {
+              const ret = hooksFunc.call(hooks, text);
+              if (typeof ret !== 'string') {
+                throw new Error(`emStrongMask hook must return a string of the same length as the string passed to it, but returned ${ret === undefined ? 'undefined' : JSON.stringify(ret)} (input length ${text.length})`);
+              }
+              if (ret.length !== text.length) {
+                throw new Error(`emStrongMask hook must return a string of the same length as the string passed to it, but returned a string of length ${ret.length} for an input of length ${text.length}. Replace masked characters one-for-one (e.g. with spaces) so emphasis delimiter positions stay aligned.`);
+              }
+              return prevHook.call(hooks, ret) as string;
+            };
           } else {
             // @ts-expect-error cannot type hook function dynamically
             hooks[hooksProp] = (...args: unknown[]) => {

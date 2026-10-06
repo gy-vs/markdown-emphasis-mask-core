@@ -365,6 +365,22 @@ marked.use({
     }
   }
 });
+marked.use({
+  hooks: {
+    emStrongMask(text) {
+      return text.replace(/\$[^$]*\$/g, span => ' '.repeat(span.length));
+    }
+  }
+});
+// emStrongMask cannot return a Promise, it runs during synchronous tokenizing
+marked.use({
+  hooks: {
+    // @ts-expect-error emStrongMask must return a string
+    async emStrongMask(text) {
+      return text;
+    }
+  }
+});
 
 // @ts-expect-error block is not exported
 import { block } from 'marked';
